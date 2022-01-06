@@ -4,10 +4,14 @@ aoc.py
 Advent of Code 2021 solutions.
 """
 
+import itertools
 import math
 import re
 from collections import Counter, defaultdict
+from heapq import heappop, heappush
 from importlib import resources
+from itertools import chain, zip_longest
+from typing import Any, Iterable, Optional
 
 
 def day_1(days_to_compare: int = 1) -> int:
@@ -545,3 +549,355 @@ def day_11() -> int:
 def day_11_2() -> int:
     """Day 11 Part 2."""
     return day_11_solver(part_2=True)
+
+
+def day_12_parser() -> defaultdict[str, set[str]]:
+    """Parser for Day 12 data."""
+    paths = defaultdict(set)
+    with resources.open_text("advent_of_code.data", "day_12.txt") as raw_text:
+        for line in raw_text:
+            i, j = line.strip().split("-")
+            if i != "end" and j != "start":
+                paths[i].add(j)
+            if i != "start" and j != "end":
+                paths[j].add(i)
+    return paths
+
+
+def day_12() -> int:
+    """Day 12 Problem 1."""
+    paths = day_12_parser()
+    is_large = {node: node.isupper() for node in paths}
+    valid_routes = []
+
+    def depth_first_search(
+        current_node: str, visited: Optional[list[str]] = None
+    ) -> None:
+        """Depth first search recursive function."""
+        if visited is None:
+            visited = []
+        visited.append(current_node)
+        for destination_node in paths[current_node]:
+            if destination_node not in visited or is_large[destination_node]:
+                depth_first_search(destination_node, visited.copy())
+        if current_node == "end":
+            valid_routes.append(visited)
+
+    depth_first_search("start")
+
+    return len(valid_routes)
+
+
+def day_12_2() -> int:
+    """Day 12 Problem 2."""
+    paths = day_12_parser()
+    is_large = {node: node.isupper() for node in paths}
+    valid_routes = []
+
+    def depth_first_search(
+        current_node: str,
+        visited: Optional[list[str]] = None,
+        twice: bool = False,
+    ) -> None:
+        """Depth first search recursive function."""
+        if visited is None:
+            visited = []
+        visited.append(current_node)
+        for destination_node in paths[current_node]:
+            if destination_node not in visited or is_large[destination_node]:
+                depth_first_search(destination_node, visited.copy(), twice)
+            elif destination_node in visited and not twice:
+                depth_first_search(
+                    destination_node, visited.copy(), twice=True
+                )
+
+        if current_node == "end":
+            valid_routes.append(visited)
+
+    depth_first_search("start")
+
+    return len(valid_routes)
+
+
+def day_13_parser(
+    filename: str = "day_13.txt",
+) -> tuple[set[tuple[int, int]], list[tuple[int, int]]]:
+    """Parser for Day 13 problems."""
+    coords = set()
+    folds = []
+    get_coords = True
+    with resources.open_text("advent_of_code.data", filename) as raw_text:
+        for line in raw_text:
+            stripped = line.strip()
+            if not stripped:
+                get_coords = False
+                continue
+            if get_coords:
+                split_line = stripped.split(",")
+                coords.add((int(split_line[0]), int(split_line[1])))
+            else:
+                folds.append((int(stripped[11] == "y"), int(stripped[13:])))
+    return coords, folds
+
+
+def day_13_fold(
+    coord: tuple[int, int], direction: int, displacement: int
+) -> tuple[int, int]:
+    """Perform coordinate folding for Day 13 problem."""
+    if coord[direction] <= displacement:
+        return coord
+    if direction == 0:
+        return (2 * displacement - coord[0], coord[1])
+    if direction == 1:
+        return (coord[0], 2 * displacement - coord[1])
+    raise ValueError
+
+
+def day_13() -> int:
+    """Day 13 Problem 1."""
+    coords, folds = day_13_parser()
+    direction, displ = folds[0]
+    new_coords = {day_13_fold(coord, direction, displ) for coord in coords}
+    return len(new_coords)
+
+
+def day_13_2() -> None:
+    """Day 13 Problem 2."""
+    coords, folds = day_13_parser()
+    for direction, displ in folds:
+        new_coords = {day_13_fold(coord, direction, displ) for coord in coords}
+        coords = new_coords.copy()
+    width = max(i[0] for i in coords) + 1
+    height = max(i[1] for i in coords) + 1
+    for j in range(height):
+        row = "".join(["#" if (i, j) in coords else " " for i in range(width)])
+        print(row)
+
+
+def day_14_parser() -> tuple[str, dict[str, str]]:
+    """Parser for Day 13 Problems."""
+    code = ""
+    pairs = {}
+    with resources.open_text("advent_of_code.data", "day_14.txt") as raw_text:
+        for index, line in enumerate(raw_text):
+            stripped = line.strip()
+            if index == 0:
+                code = stripped
+            elif index > 1:
+                pair, element = stripped.split(" -> ")
+                pairs[pair] = element
+
+    return code, pairs
+
+
+def day_14() -> int:
+    """Day 14 Problem 1."""
+
+    code, pairs = day_14_parser()
+
+    for _ in range(10):
+        inserts = "".join(pairs[code[i : i + 2]] for i in range(len(code) - 1))
+        code = "".join(
+            chain.from_iterable(zip_longest(code, inserts, fillvalue=""))
+        )
+
+    counter = Counter(code)
+
+    return max(counter.values()) - min(counter.values())
+
+
+def day_14_2() -> int:
+    """Day 14 Problem 2."""
+    code, pairs = day_14_parser()
+    counter = Counter(code[i : i + 2] for i in range(len(code) - 1))
+
+    def advance(counter: Counter[str]) -> Counter[str]:
+        last_counter = counter.copy()
+        for pair, count in last_counter.items():
+            counter[pair] -= count
+            counter[pair[0] + pairs[pair]] += count
+            counter[pairs[pair] + pair[1]] += count
+        return counter
+
+    for _ in range(40):
+        counter = advance(counter)
+
+    letter_counts = {"B": 0, "C": 0, "H": 0, "N": 0}
+    for key, count in counter.items():
+        for char in letter_counts:
+            if char in key:
+                letter_counts[char] += count
+            if key == char + char:
+                letter_counts[char] += count
+
+    for k in letter_counts:
+        letter_counts[k] = math.ceil(letter_counts[k] / 2)
+
+    return max(letter_counts.values()) - min(letter_counts.values())
+
+
+def day_15_parser(
+    multiplier: int = 1,
+) -> tuple[dict[tuple[tuple[int, int], tuple[int, int]], int], int]:
+    """Parser for Day 15 problems."""
+    levels: dict[tuple[int, int], int] = {}
+    size = 0
+
+    with resources.open_text(
+        "advent_of_code.data", "day_15.txt"
+    ) as raw_text:
+        for j, row in enumerate(raw_text):
+            size += 1
+            stripped = row.strip()
+            for i, level_str in enumerate(stripped):
+                levels[i, j] = int(level_str)
+
+    if multiplier > 1:
+        old_levels = levels.copy()
+        old_size = size
+        size *= multiplier
+        levels = {}
+        for i_mul in range(multiplier):
+            for j_mul in range(multiplier):
+                for (i, j), weight in old_levels.items():
+                    levels[i + old_size * i_mul, j + old_size * j_mul] = (
+                        weight + i_mul + j_mul - 1
+                    ) % 9 + 1
+
+    edgelist: dict[tuple[tuple[int, int], tuple[int, int]], int] = {}
+    deltas = [(0, 1), (1, 0), (-1, 0), (0, -1)]
+
+    for coord in levels:
+        for delta in deltas:
+            adjacent = (coord[0] + delta[0], coord[1] + delta[1])
+            if adjacent in levels:
+                edgelist[coord, adjacent] = levels[adjacent]
+
+    return edgelist, size
+
+
+def day_15() -> int:
+    """Day 15 Problem 1."""
+    edgelist, size = day_15_parser()
+    distances = dijkstra(edgelist, (0, 0))
+    return int(distances[size - 1, size - 1])
+
+
+def day_15_2() -> int:
+    """Day 15 Problem 2."""
+    edgelist, size = day_15_parser(multiplier=5)
+    distances = dijkstra(edgelist, (0, 0))
+    return int(distances[size - 1, size - 1])
+
+
+class TaskEntry:
+    """A task."""
+
+    REMOVED = object()
+
+    def __init__(self, priority: float, count: int, task: Any):
+        self.priority = priority
+        self.count = count
+        self.task = task
+
+    def __lt__(self, other: Any) -> bool:
+        if isinstance(other, TaskEntry):
+            return (self.priority, self.count, self.task) < (
+                other.priority,
+                other.count,
+                other.task,
+            )
+        raise TypeError
+
+
+class PriorityQueue:
+    """A priority queue implementation based on one descriped in heapq."""
+
+    def __init__(
+        self, tasks_prios: Optional[Iterable[tuple[Any, int]]] = None
+    ):
+        self.queue: list[TaskEntry] = []
+        self.entry_finder: dict[Any, TaskEntry] = {}
+        self.counter = itertools.count()
+        if tasks_prios:
+            for task, prio in tasks_prios:
+                self.add_task(task, prio)
+
+    def __iter__(self) -> Any:
+        return (
+            task_entry.task
+            for task_entry in self.queue
+            if task_entry.task is not task_entry.REMOVED
+        )
+
+    def __len__(self) -> int:
+        return len(list(self.__iter__()))
+
+    def add_task(self, task: Any, priority: float = 0) -> None:
+        """Add a new task or update the priority of an existing task."""
+        if task in self.entry_finder:
+            self.remove_task(task)
+        count = next(self.counter)
+        entry = TaskEntry(priority, count, task)
+        self.entry_finder[task] = entry
+        heappush(self.queue, entry)
+
+    def remove_task(self, task: Any) -> None:
+        """
+        Mark an existing task as REMOVED. Raise KeyError if not found.
+        """
+        entry = self.entry_finder.pop(task)
+        entry.task = TaskEntry.REMOVED
+
+    def pop_task(self) -> Any:
+        """
+        Remove and return the lowest priority task. Raise KeyError if
+        empty.
+        """
+        while self.queue:
+            task_entry = heappop(self.queue)
+            if task_entry.task is not TaskEntry.REMOVED:
+                del self.entry_finder[task_entry.task]
+                return task_entry.task
+        raise KeyError("pop from an empty priority queue")
+
+
+def dijkstra(
+    edgelist: dict[tuple[tuple[int, int], tuple[int, int]], int],
+    start_node: tuple[int, int],
+) -> dict[tuple[int, int], float]:
+    """An implementation of Dijkstra's algorithm."""
+    permanent_set = {start_node}
+    priority_queue = PriorityQueue()
+    lengths: dict[tuple[int, int], float] = {}
+    parent_pointers: dict[tuple[int, int], tuple[int, int]] = {}
+
+    nodes = {e[0] for e in edgelist}.union({e[1] for e in edgelist})
+
+    for node in nodes:
+        if node == start_node:
+            lengths[node] = 0
+        else:
+            if (start_node, node) in edgelist:
+                lengths[node] = edgelist[start_node, node]
+            else:
+                lengths[node] = math.inf
+            parent_pointers[node] = start_node
+            priority_queue.add_task(node, lengths[node])
+
+    while len(priority_queue):
+        i = priority_queue.pop_task()
+        if i in permanent_set:
+            continue
+        permanent_set.add(i)
+
+        for j in priority_queue:
+            if j in permanent_set:
+                continue
+            if (i, j) in edgelist:
+                if lengths[j] > lengths[i] + edgelist[i, j]:
+                    lengths[j] = lengths[i] + edgelist[i, j]
+                    parent_pointers[j] = i
+                    priority_queue.add_task(j, lengths[j])
+
+    return lengths

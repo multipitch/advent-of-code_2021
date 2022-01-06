@@ -24,15 +24,10 @@ requires = ["poetry-core>=1.0.0"]
 line-length = 79
 
 [tool.pylint.message_control]
-disable = "fixme"
+disable = ["C0330", "C0326", "fixme"]
 
 [tool.isort]
-ensure_newline_before_comments = true
-force_grid_wrap = 0
-include_trailing_comma = true
-line_length = 79
-multi_line_output = 3
-use_parentheses = true
+profile = "black"
 
 [tool.mypy]
 check_untyped_defs = true
